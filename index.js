@@ -22,8 +22,16 @@ function main() {
       password: config.github_token
   });
   var githubIssues = P.promisifyAll(github.issues);
+  var pullRequests = [];
 
-  function concatNextPages(curPage, acc) {
+  function hasRelatedPR (issueNumber) {
+    return pullRequests.some(function (pr) {
+      var issueRef = new RegExp("((Fix(e(s|d))?)|((Close|Resolve)(s|d)?)) #" + issueNumber, "i");
+      return issueRef.test(pr.body);
+    })
+  }
+
+  function concatNextPages (curPage, acc) {
     acc = acc || [];
     acc = acc.concat(curPage);
     if(github.hasNextPage(curPage)) {
@@ -62,13 +70,16 @@ function main() {
   githubIssues.repoIssuesAsync({
     user: config.github_repo_owner,
     repo: config.github_repo_name,
-    assignee: "*",
     per_page: "100"
   })
   .then(concatNextPages)
-  .then(function removePRs (issues) {
+  .then(function filterIssues (issues) {
     return issues.filter(function (issue) {
-      return issue.pull_request === undefined;
+      if(issue.pull_request) {
+        pullRequests.push(issue);
+        return false;
+      }
+      return issue.assignee !== undefined;
     });
   })
   .then(function fetchEvents (issues) {
@@ -83,8 +94,8 @@ function main() {
           return true;
         }
       });
-
-      return lastAssignment < dateThreshold;
+      return lastAssignment < dateThreshold
+             && !hasRelatedPR(issue.number);
     });
   })
   .then(function (issues) {
