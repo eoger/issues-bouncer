@@ -1,0 +1,11 @@
+var config = {};
+
+// Used with Basic Authentification
+config.github_user = "issues-bouncer";
+config.github_token = "TOKEN HERE";
+
+config.github_repo_owner = "USER";
+config.github_repo_name = "REPOSITORY";
+config.days_before_unassign = 14;
+
+module.exports = config;

@@ -1,0 +1,22 @@
+{
+  "name": "issues-bouncer",
+  "version": "1.0.0",
+  "description": "A bot that automaticly un-assigns people from issues without pull requests 2 weeks after they assigned themselves.",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "eoger",
+  "license": "Mozilla Public License Version 2.0",
+  "dependencies": {
+    "bluebird": "^2.9.27",
+    "github": "^0.2.4"
+  },
+   "repository": {
+    "type": "git",
+    "url": "https://github.com/eoger/issues-bouncer"
+  },
+    "bugs": {
+    "url": "https://github.com/eoger/issues-bouncer/issues"
+  }
+}
