@@ -26,9 +26,10 @@ function main() {
 
   function hasRelatedPR (issueNumber) {
     return pullRequests.some(function (pr) {
-      var issueRef = new RegExp("((Fix(e(s|d))?)|((Close|Resolve)(s|d)?)) #" + issueNumber, "i");
+      var issueRef = new RegExp("((Fix(e(s|d))?)|((Close|Resolve)(s|d)?)) #" +
+        issueNumber, "i");
       return issueRef.test(pr.body);
-    })
+    });
   }
 
   function concatNextPages (curPage, acc) {
