@@ -1,6 +1,6 @@
 # issues-bouncer
 
-A bot that automaticly un-assigns people from issues without pull requests 2 weeks after they assigned themselves.
+A bot that automatically un-assigns people from issues without pull requests 2 weeks after they assigned themselves.
 
 ## Setup
 
