@@ -79,7 +79,7 @@ function main() {
         pullRequests.push(issue);
         return false;
       }
-      return issue.assignee !== undefined;
+      return issue.assignee !== null;
     });
   })
   .then(function fetchEvents (issues) {
