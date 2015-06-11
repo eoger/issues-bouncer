@@ -52,14 +52,7 @@ function main() {
       repo: config.github_repo_name,
       number: issue.number
     })
-    .then(concatNextPages)
-    .then(function (events) {
-      return {
-        number: issue.number,
-        assignee: issue.assignee.login,
-        events: events
-      };
-    });
+    .then(concatNextPages);
   }
 
   function unassignMessage (assignee) {
@@ -84,7 +77,16 @@ function main() {
     });
   })
   .then(function fetchEvents (issues) {
-    return P.map(issues, fetchIssueEvents);
+    return P.map(issues, function (issue) {
+      fetchIssueEvents(issue)
+      .then(function (events) {
+        return {
+          number: issue.number,
+          assignee: issue.assignee.login,
+          events: events
+        };
+      });
+    });
   })
   .then(function filterStaleIssues (issues) {
     return issues.filter(function (issue) {
