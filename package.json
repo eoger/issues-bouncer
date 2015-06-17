@@ -4,13 +4,15 @@
   "description": "A bot that automatically un-assigns people from issues without pull requests 2 weeks after they assigned themselves.",
   "scripts": {
     "start": "node index.js",
+    "dry": "node index.js --dryrun",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "eoger",
   "license": "MPL-2.0",
   "dependencies": {
     "bluebird": "^2.9.27",
-    "github": "^0.2.4"
+    "github": "^0.2.4",
+    "yargs": "^3.11.0"
   },
   "repository": {
     "type": "git",

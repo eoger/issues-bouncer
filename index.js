@@ -3,6 +3,7 @@
 var P = require("bluebird");
 var GitHubApi = require("github");
 var config = require("./config");
+var argv = require('yargs').argv;
 
 function main() {
   "use strict";
@@ -10,19 +11,20 @@ function main() {
   var seconds = config.days_before_unassign * 24 * 3600 * 1000;
   var dateThreshold = new Date(new Date().getTime() - seconds);
 
-  var github = new GitHubApi({
+  var github = P.promisifyAll(new GitHubApi({
       version: "3.0.0",
       protocol: "https",
       timeout: 10000
-  });
-  github = P.promisifyAll(github);
+  }));
+  var githubIssues = P.promisifyAll(github.issues);
+
+  var pullRequests = [];
+
   github.authenticate({
       type: "basic",
       username: config.github_user,
       password: config.github_token
   });
-  var githubIssues = P.promisifyAll(github.issues);
-  var pullRequests = [];
 
   function hasRelatedPR (issueNumber) {
     return pullRequests.some(function (pr) {
@@ -78,7 +80,7 @@ function main() {
   })
   .then(function fetchEvents (issues) {
     return P.map(issues, function (issue) {
-      fetchIssueEvents(issue)
+      return fetchIssueEvents(issue)
       .then(function (events) {
         return {
           number: issue.number,
@@ -105,6 +107,11 @@ function main() {
     P.each(issues, function unassign (issue) {
       console.log("Bouncing https://github.com/" + config.github_repo_owner +
                   "/" + config.github_repo_name + "/issues/" + issue.number);
+
+      if (argv.dryrun) {
+        return true;
+      }
+
       return githubIssues.editAsync({
         user: config.github_repo_owner,
         repo: config.github_repo_name,
