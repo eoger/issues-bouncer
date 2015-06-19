@@ -8,4 +8,6 @@ config.github_repo_owner = "USER";
 config.github_repo_name = "REPOSITORY";
 config.days_before_unassign = 14;
 
+config.requests_timeout = 10000;
+
 module.exports = config;

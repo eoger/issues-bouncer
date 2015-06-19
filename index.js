@@ -3,7 +3,7 @@
 var P = require("bluebird");
 var GitHubApi = require("github");
 var config = require("./config");
-var argv = require('yargs').argv;
+var argv = require("yargs").argv;
 
 function main() {
   "use strict";
@@ -14,11 +14,9 @@ function main() {
   var github = P.promisifyAll(new GitHubApi({
       version: "3.0.0",
       protocol: "https",
-      timeout: 10000
+      timeout: config.requests_timeout
   }));
   var githubIssues = P.promisifyAll(github.issues);
-
-  var pullRequests = [];
 
   github.authenticate({
       type: "basic",
@@ -26,11 +24,23 @@ function main() {
       password: config.github_token
   });
 
+  var pullRequests = [];
+
+  function isIssueMentioned (obj, issueNumber) {
+    var action = "((Fix(e(s|d))?)|((Close|Resolve)(s|d)?)) ";
+    var issueNumberReg = new RegExp(action + "#" + issueNumber, "i");
+    var issueUrlReg = new RegExp(action +
+      "https?:\/\/github.com\/" + config.github_repo_owner + "\/" +
+      config.github_repo_name + "\/issues\/" + issueNumber, "i");
+
+    return issueNumberReg.test(obj.body) || issueUrlReg.test(obj.body);
+  }
+
   function hasRelatedPR (issueNumber) {
     return pullRequests.some(function (pr) {
-      var issueRef = new RegExp("((Fix(e(s|d))?)|((Close|Resolve)(s|d)?)) #" +
-        issueNumber, "i");
-      return issueRef.test(pr.body);
+      return isIssueMentioned(pr, issueNumber) || pr.comments.some(function (comment) {
+        return isIssueMentioned(comment, issueNumber);
+      });
     });
   }
 
@@ -57,50 +67,125 @@ function main() {
     .then(concatNextPages);
   }
 
+  function fetchIssueComments (issue) {
+    return githubIssues.getCommentsAsync({
+      user: config.github_repo_owner,
+      repo: config.github_repo_name,
+      number: issue.number
+    })
+    .then(concatNextPages);
+  }
+
+  function findLastAssignment (issue) {
+    var lastAssignment;
+    issue.events.reverse().some(function (event) {
+      if (event.event === "assigned") {
+        lastAssignment = new Date(event.created_at);
+        return true;
+      }
+    });
+    return lastAssignment;
+  }
+
+  function findLastBouncerComment (issue) {
+    var lastComment;
+    issue.comments.reverse().some(function (comment) {
+      if (comment.user.login === config.github_user) {
+        lastComment = new Date(comment.created_at);
+        return true;
+      }
+    });
+    return lastComment;
+  }
+
+  function warningMessage (assignee) {
+    return "Hey @" + assignee + ", you have been assigned on this issue for more than "
+           + config.days_before_unassign + " days!\n" +
+           "Maybe you should consider un-assigning yourself and let other people try to solve this issue.";
+  }
+
   function unassignMessage (assignee) {
     return "Sorry @" + assignee + " you have been assigned on this issue for" +
-    " more than " + config.days_before_unassign + " days!";
+           " more than " + config.days_before_unassign + " days!";
+  }
+
+  function commentIssue (issue, commentOnly) {
+    return githubIssues.createCommentAsync({
+      user: config.github_repo_owner,
+      repo: config.github_repo_name,
+      number: issue.number,
+      body: commentOnly ? warningMessage(issue.assignee.login) :
+                          unassignMessage(issue.assignee.login)
+    });
+  }
+
+  function unassignIssue (issue) {
+    return githubIssues.editAsync({
+      user: config.github_repo_owner,
+      repo: config.github_repo_name,
+      number: issue.number,
+      assignee: ""
+    });
   }
 
   /*eslint camelcase: [2, {properties: "never"}]*/
   githubIssues.repoIssuesAsync({
     user: config.github_repo_owner,
     repo: config.github_repo_name,
-    per_page: "100"
+    per_page: "100",
+    state: "all"
   })
   .then(concatNextPages)
-  .then(function filterIssues (issues) {
+  .then(function filterUnassignedIssues (issues) {
     return issues.filter(function (issue) {
-      if(issue.pull_request) {
+      return issue.pull_request
+             || (issue.assignee !== null && issue.state === "open");
+    });
+  })
+  .then(function fetchComments (issues) {
+    return P.map(issues, function (issue) {
+      return fetchIssueComments(issue)
+      .then(function (comments) {
+        issue.comments = comments;
+        return issue;
+      });
+    });
+  })
+  .then(function separatePRs (issues) {
+    return issues.filter(function (issue) {
+      var isPR = issue.pull_request !== undefined;
+      if(isPR) {
         pullRequests.push(issue);
-        return false;
       }
-      return issue.assignee !== null;
+      return !isPR;
     });
   })
   .then(function fetchEvents (issues) {
     return P.map(issues, function (issue) {
       return fetchIssueEvents(issue)
       .then(function (events) {
-        return {
-          number: issue.number,
-          assignee: issue.assignee.login,
-          events: events
-        };
+        issue.events = events;
+        return issue;
       });
     });
   })
   .then(function filterStaleIssues (issues) {
     return issues.filter(function (issue) {
-      var lastAssignment;
-      issue.events.some(function (event) {
-        if (event.event === "assigned") {
-          lastAssignment = new Date(event.created_at);
-          return true;
-        }
-      });
-      return lastAssignment < dateThreshold
-             && !hasRelatedPR(issue.number);
+      var lastAssignment = findLastAssignment(issue);
+      if (lastAssignment > dateThreshold) {
+        return false;
+      }
+
+      var lastBouncerComment = findLastBouncerComment(issue);
+      if (lastBouncerComment && lastBouncerComment > dateThreshold) {
+        return false;
+      }
+
+      if (hasRelatedPR(issue.number)) {
+        return false;
+      }
+
+      return true;
     });
   })
   .then(function (issues) {
@@ -108,24 +193,18 @@ function main() {
       console.log("Bouncing https://github.com/" + config.github_repo_owner +
                   "/" + config.github_repo_name + "/issues/" + issue.number);
 
+      var actions;
       if (argv.dryrun) {
-        return true;
+        actions = true;
       }
+      else {
+        actions = commentIssue(issue, argv.noedit);
+        if (!argv.noedit) {
+          actions.then(unassignIssue);
+        }
+      }
+      return actions;
 
-      return githubIssues.editAsync({
-        user: config.github_repo_owner,
-        repo: config.github_repo_name,
-        number: issue.number,
-        assignee: ""
-      })
-      .then(function addComment () {
-        return githubIssues.createCommentAsync({
-          user: config.github_repo_owner,
-          repo: config.github_repo_name,
-          number: issue.number,
-          body: unassignMessage(issue.assignee)
-        });
-      });
     });
   })
   .then(function () {
