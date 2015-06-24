@@ -9,4 +9,6 @@ A bot that automatically un-assigns people from issues without pull requests 2 w
 3. `vi config.js`
 
 ## Run
-1. `npm start`
+* Classic mode: `npm start`
+* Dry run: `npm run dry`
+* Comment only: `npm run noedit`
